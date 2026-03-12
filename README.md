@@ -1,0 +1,4 @@
+This work is a hybrid ALNS and LKH implementation done for my undergrad thesis.
+It is largely inspired from the work of Jiayuan Yang and Junhua Wang (2023),accessible at: https://doi.org/10.1109/ICCC59590.2023.10507381
+
+Where Yang and Wang (2023) implemented it on a Two Echelon VRP with Backhauls (2E-CVRP-Bh), this work aims to expand the problem set and adapt it to the contexts of a farm to table school lunch system, with the environment of indonesia as a case study. The problem tackled being a sort of Multi Depot - Multi Commodity - Two Echelon VRP with Time Windows and Backhauls (MD-MC-2E-VRP-TW-BH). Though multi commodity is only applied for the first echelon and backhauls are only applied for the second echelon.
