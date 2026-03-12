@@ -1,0 +1,8 @@
+{
+  "dependencies": [
+    "tbb",
+    "highs",
+    "gtest",
+    "fmt"
+  ]
+}
