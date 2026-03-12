@@ -15,47 +15,41 @@
  */
 struct Config {
   /* @brief Name of the instance file to be loaded. */
-  std::string instanceName = "small-sch10-kch5-spl5-dmnd1032-sppg0.2-mv1.5.json";
+  std::string instanceName = "small-sch10-kch5-spl5-dmnd1032-sppg0.20-mv1.50";
 
   /** @brief Maximum number of iterations in the search process. */
   int maxIteration = 30000;
 
-  /** @brief Scoring decay factor for operator performance evaluation. */
-  int etaScore = 10;
+  /** @brief Initial temperature for the simulated annealing process. */
+  double initialTemp = 0.05 * maxIteration;
 
-  /** @brief Number of iterations before resetting the current best solution score. */
-  int etaResetBest = 200;
+  /** @brief Minimum temperature for the simulated annealing process. */
+  double minimumTemp = 0.06;
 
-  /** @brief Number of iterations before performing a full restart of the search. */
-  int etaRestart = 3000;
+  /** @brief Length of each segment for scoring evaluation. */
+  int segmentLength = 100;
 
-  /** @brief Smoothing factor used in score adaptation (0 < smoothingFactor ≤ 1). */
-  double smoothingFactor = 2./3.;
+  /** @brief Reaction factor used in score adaptation (0 < reactionFactor ≤ 1). */
+  double reactionFactor = 0.1;
 
   /** @brief Score weight assigned to newly found best solutions. */
-  double bestFoundScore = 15;
+  double bestFoundScore = 40;
 
   /** @brief Score weight assigned to accepted (non-best) solutions. */
-  double acceptedScore = 4;
+  double acceptedScore = 20;
 
   /** @brief Score weight assigned to worse but still accepted solutions. */
-  double worseAcceptedScore = 1;
+  double worseAcceptedScore = 10;
 
-  /**
-   * @brief MRT line cost discount rate (0 means disabled).
-   * 
-   * If nonzero, the MRT line transportation cost is multiplied by (1 − mrtLineDiscountRate)
-   * to simulate discounted fares in sensitivity analysis.
-   */
-  double mrtLineDiscountRate = 0;
+  /** @brief Initial weight for the operators. */
+  double initialWeight = 40.0;
 
-  /**
-   * @brief Early-stopping patience for L1 operators.
-   * 
-   * Number of iterations allowed without improvement before switching or intensifying L1 operators.
-   */
-  int patienceL1 = 20;
+  /** @brief Minimum percentage of customers to remove during destroy phase. */
+  double minRemoved = 0.20;
 
+  /** @brief Maximum percentage of customers to remove during destroy phase. */
+  double maxRemoved = 0.40;
+  
   /**
    * @brief Adjusted vehicle capacity for sensitivity analysis.
    * 
@@ -71,6 +65,19 @@ struct Config {
    * Used to evaluate cost sensitivity.
    */
   double adjustedVehicleCost = -1;
+
+  // ==========================================
+  // MBG Logistical Constraints (From Chapter 3)
+  // ==========================================
+
+  /** @brief Driver rest time in minutes before starting backhaul. */
+  int driverRestTime = 30;
+
+  /** @brief Overtime threshold in minutes (1080 mins = 18:00). */
+  int overtimeThreshold = 1080;
+
+  /** @brief Maximum allowed time in minutes from food prep to consumption. */
+  int maxFoodAge = 180;
 
   /** @brief Optional suffix to append to the output result directory name. */
   std::string resultDirSuffix = "";
@@ -89,33 +96,42 @@ struct Config {
     // Assign values if provided
     if (args.count("instance-name")) instanceName = args["instance-name"];
     if (args.count("max-iteration")) maxIteration = std::stoi(args["max-iteration"]);
-    if (args.count("eta-score")) etaScore = std::stoi(args["eta-score"]);
-    if (args.count("eta-reset-best")) etaResetBest = std::stoi(args["eta-reset-best"]);
-    if (args.count("eta-restart")) etaRestart = std::stoi(args["eta-restart"]);
-    if (args.count("smoothing-factor")) smoothingFactor = std::stod(args["smoothing-factor"]);
-    if (args.count("mrt-line-discount-rate")) mrtLineDiscountRate = std::stod(args["mrt-line-discount-rate"]);
+    if (args.count("initial-temp")) initialTemp = std::stod(args["initial-temp"]);
+    if (args.count("minimum-temp")) minimumTemp = std::stod(args["minimum-temp"]);
+    if (args.count("segment-length")) segmentLength = std::stoi(args["segment-length"]);
+    if (args.count("reaction-factor")) reactionFactor = std::stod(args["reaction-factor"]);
     if (args.count("adjusted-vehicle-capacity")) adjustedVehicleCapacity = std::stoi(args["adjusted-vehicle-capacity"]);
     if (args.count("adjusted-vehicle-cost")) adjustedVehicleCost = std::stod(args["adjusted-vehicle-cost"]);
     if (args.count("best-found-score")) bestFoundScore = std::stod(args["best-found-score"]);
     if (args.count("accepted-score")) acceptedScore = std::stod(args["accepted-score"]);
     if (args.count("worse-accepted-score")) worseAcceptedScore = std::stod(args["worse-accepted-score"]);
-    if (args.count("patience-l1")) patienceL1 = std::stoi(args["patience-l1"]);
+    if (args.count("initial-weight")) initialWeight = std::stod(args["initial-weight"]);
+    if (args.count("min-removed")) minRemoved = std::stod(args["min-removed"]);
+    if (args.count("max-removed")) maxRemoved = std::stod(args["max-removed"]);
+    if (args.count("driver-rest-time")) driverRestTime = std::stoi(args["driver-rest-time"]);
+    if (args.count("overtime-threshold")) overtimeThreshold = std::stoi(args["overtime-threshold"]);
+    if (args.count("max-food-age")) maxFoodAge = std::stoi(args["max-food-age"]);
     if (args.count("result-dir-suffix")) resultDirSuffix = args["result-dir-suffix"];
   }
 
   void print() const {
       std::cout << "instanceName: " << instanceName << "\n"
-                << "etaScore: " << etaScore << "\n"
-                << "etaResetBest: " << etaResetBest << "\n"
-                << "etaRestart: " << etaRestart << "\n"
-                << "smoothingFactor: " << smoothingFactor << "\n"
+                << "maxIteration: " << maxIteration << "\n"
+                << "initialTemp: " << initialTemp << "\n"
+                << "minimumTemp: " << minimumTemp << "\n"
+                << "segmentLength: " << segmentLength << "\n"
+                << "reactionFactor: " << reactionFactor << "\n"
                 << "bestFoundScore: " << bestFoundScore << "\n"
                 << "acceptedScore: " << acceptedScore << "\n"
                 << "worseAcceptedScore: " << worseAcceptedScore << "\n"
-                << "patienceL1: " << patienceL1 << "\n"
-                << "mrtLineDiscountRate" << mrtLineDiscountRate <<"\n"
-                << "adjustedVehicleCapacity" << adjustedVehicleCapacity <<"\n"
-                << "adjustedVehicleCost" << adjustedVehicleCost <<"\n"
+                << "adjustedVehicleCapacity: " << adjustedVehicleCapacity <<"\n"
+                << "adjustedVehicleCost: " << adjustedVehicleCost <<"\n"
+                << "initialWeight: " << initialWeight << "\n"
+                << "minRemoved: " << minRemoved << "\n"
+                << "maxRemoved: " << maxRemoved << "\n"
+                << "driverRestTime: " << driverRestTime << "\n"
+                << "overtimeThreshold: " << overtimeThreshold << "\n"
+                << "maxFoodAge: " << maxFoodAge << "\n"
                 << "resultDirSuffix: " << resultDirSuffix << "\n";
   }
 };
