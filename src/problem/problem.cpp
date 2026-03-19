@@ -1,4 +1,4 @@
-// placeholder
+
 #include <cmath>
 #include <fstream>
 #include <numeric>
@@ -6,6 +6,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <nlohmann/json.hpp>
 
 #include "problem/problem.h"
 #include "problem/node.h"
@@ -15,24 +16,14 @@
 #include "problem/vehicle.h"
 #include "problem/ingredient.h"
 
-
-static std::vector<std::string> split(const std::string input, const char delimiter) {
-  std::vector<std::string> tokens;
-  std::stringstream ss(input);
-  std::string token;
-  while (getline(ss, token, delimiter)) {
-    tokens.push_back(token);
+static int findIngredientTypeIndex(std::vector<Ingredient>& ingredients, std::string ingredientType) {
+  for (size_t i = 0; i < ingredients.size(); i++)
+  {
+    if (ingredients[i].name == ingredientType) {
+      return i;
+    }
   }
-  return tokens;
-}
-
-static std::vector<int> parsePrefLockerIdxString(std::string prefLockerIdxsString) {
-  std::vector<std::string> prefLockerIdxsStringVec = split(prefLockerIdxsString, '-');
-  std::vector<int> prefLockerIdxs;
-  for (auto& token : prefLockerIdxsStringVec) {
-    prefLockerIdxs.push_back(std::stoi(token));
-  }
-  return prefLockerIdxs;
+  throw std::runtime_error("Ingredient type " + ingredientType + " not found in ingredients list");
 }
 
 ProblemInstance readProblemInstance(std::string instancePath) {
@@ -40,176 +31,212 @@ ProblemInstance readProblemInstance(std::string instancePath) {
   std::string errMessage = "Error opening, file not found at " + instancePath;
   if (!file) throw std::runtime_error(errMessage);
 
+  nlohmann::json instance = nlohmann::json::parse(file);
+
   std::string line;
   int index = 0;
 
+  //assume that the file (json) is written in this order
   std::vector<School> schools;
-  std::vector<std::vector<double>> distanceMatrix;
+  std::vector<Kitchen> kitchens;
+  std::vector<Supplier> suppliers;
+  std::vector<std::vector<double>> first_echelon_matrix;
+  std::vector<std::vector<double>> second_echelon_matrix;
+  std::vector<Vehicle> first_echelon_vehicles;
+  std::vector<Vehicle> second_echelon_vehicles;
+  std::vector<Ingredient> ingredients;
 
-  getline(file, line);
-  getline(file, line);
-  while (getline(file, line)) {
-    if (line == "depot") break;
-    auto tokens = split(line, ',');
-    int idx = std::stoi(tokens[0]);
-    int capacity= std::stoi(tokens[1]);
-    double cost = std::stod(tokens[2]);
-    vehicles.emplace_back(idx, capacity, cost);
+  nlohmann::json schoolsJson = instance["schools"];
+  for (size_t i = 0; i < schoolsJson.size(); i++)
+  {
+    School school(
+      schoolsJson[i]["school_id"],
+      schoolsJson[i]["latitude"],
+      schoolsJson[i]["longitude"],
+      schoolsJson[i]["school_name"],
+      schoolsJson[i]["demand"],
+      schoolsJson[i]["lunch_time"],
+      schoolsJson[i]["service_time"]
+    );
+    schools.push_back(school);
   }
-  getline(file, line);
-  getline(file, line);
-  auto tokensD = split(line,',');
-  int idxDepot = std::stoi(tokensD[0]);
-  double depotX = std::stod(tokensD[1]);
-  double depotY = std::stod(tokensD[2]);
-  Node depot(idxDepot, depotX, depotY, NodeType::Depot);
-  getline(file, line);
-  getline(file, line);
+  
+  nlohmann::json kitchensJson = instance["kitchens"];
+  for (size_t i = 0; i < kitchensJson.size(); i++)
+  {
+    Kitchen kitchen(
+      kitchensJson[i]["kitchen_id"],
+      kitchensJson[i]["latitude"],
+      kitchensJson[i]["longitude"],
+      kitchensJson[i]["capacity"],
+      kitchensJson[i]["fixed_cost"],
+      kitchensJson[i]["maximum_vehicles"],
+      kitchensJson[i]["kitchen_name"]
+    );
+    kitchens.push_back(kitchen);
+  }
 
-  while (getline(file, line)) {
-    if (line == "self pickup customers") break;
-    auto tokens = split(line, ',');
-    int idx = std::stoi(tokens[0]);
-    double x = std::stod(tokens[1]);
-    double y = std::stod(tokens[2]);
-    int demand = std::stoi(tokens[4]);
-    std::vector<int> prefLockerIdxs;
-    customers.emplace_back(idx, x, y, NodeType::HomeDelivery, demand, prefLockerIdxs);
+  nlohmann::json ingredientsJson = instance["ingredients"];
+  for (size_t i = 0; i < ingredientsJson.size(); i++)
+  {
+    Ingredient ingredient(
+      ingredientsJson[i]["ingredient_name"],
+      ingredientsJson[i]["tray_to_kg_ratio"]
+    );
+    ingredients.push_back(ingredient);
   }
-  getline(file, line);
-  while (getline(file, line)) {
-    if (line == "flexible customers") break;
-    auto tokens = split(line, ',');
-    int idx = std::stoi(tokens[0]);
-    double x = std::stod(tokens[1]);
-    double y = std::stod(tokens[2]);
-    int demand = std::stoi(tokens[4]);
-    std::string prefLockerIdxsString = tokens[5];
-    std::vector<int> prefLockerIdxs = parsePrefLockerIdxString(prefLockerIdxsString);
-    customers.emplace_back(idx, x, y, NodeType::SelfPickup, demand, prefLockerIdxs);
+
+  nlohmann::json suppliersJson = instance["suppliers"];
+  for (size_t i = 0; i < suppliersJson.size(); i++)
+  {
+    Supplier supplier(
+      suppliersJson[i]["supplier_id"],
+      suppliersJson[i]["latitude"],
+      suppliersJson[i]["longitude"],
+      suppliersJson[i]["type"],
+      suppliersJson[i]["ingredient"],
+      suppliersJson[i]["supplier_name"]
+    );
+    suppliers.push_back(supplier);
   }
-  getline(file, line);
-  while (getline(file, line)) {
-    if (line == "lockers") break;
-    auto tokens = split(line, ',');
-    int idx = std::stoi(tokens[0]);
-    double x = std::stod(tokens[1]);
-    double y = std::stod(tokens[2]);
-    int demand = std::stoi(tokens[4]);
-    std::string prefLockerIdxsString = tokens[5];
-    std::vector<int> prefLockerIdxs = parsePrefLockerIdxString(prefLockerIdxsString);
-    customers.emplace_back(idx, x, y, NodeType::Flexible, demand, prefLockerIdxs);
-  }
-  getline(file, line);
-  while (getline(file, line)) {
-    if (line == "mrt lines") break;
-    auto tokens = split(line, ',');
-    int idx = std::stoi(tokens[0]);
-    double x = std::stod(tokens[1]);
-    double y = std::stod(tokens[2]);
-    int capacity = std::stoi(tokens[4]);
-    lockers.emplace_back(idx, x, y, capacity);
-  }
-  getline(file, line);
-  while (getline(file, line)) {
-    if (line == "distance matrix") break;
-    auto tokens = split(line, ',');
-    int startStationIdx = std::stoi(tokens[0]);
-    int endStationIdx = std::stoi(tokens[1]);
-    int capacity = std::stoi(tokens[2]);
-    double cost = std::stod(tokens[3]);
-    mrtLines.emplace_back(startStationIdx, endStationIdx, cost, capacity);
-  }
-  getline(file, line);
-  int numNodes = int(customers.size()) + int(lockers.size()) + 1;
-  distanceMatrix.assign(numNodes, std::vector<double>(numNodes));
-  for (int i = 0; i < numNodes; i++) {
-    getline(file, line);
-    auto distsString = split(line, ',');
-    for (int j = 0; j < numNodes; j++) {
-      distanceMatrix[i][j] = std::stod(distsString[j + 1]);
+  
+  nlohmann::json firstEchelonMatrixJson = instance["first_echelon_matrix"];
+  for (size_t i = 0; i < firstEchelonMatrixJson.size(); i++)
+  {
+    std::vector<double> row;
+    for (size_t j = 0; j < firstEchelonMatrixJson[i].size(); j++)
+    {
+      row.push_back(firstEchelonMatrixJson[i][j]);
     }
+    first_echelon_matrix.push_back(row);
   }
-  ProblemInstance problem(depot, customers, lockers, mrtLines, vehicles, distanceMatrix);
+
+  nlohmann::json secondEchelonMatrixJson = instance["second_echelon_matrix"];
+  for (size_t i = 0; i < secondEchelonMatrixJson.size(); i++)
+  {
+    std::vector<double> row;
+    for (size_t j = 0; j < secondEchelonMatrixJson[i].size(); j++)
+    {
+      row.push_back(secondEchelonMatrixJson[i][j]);
+    }
+    second_echelon_matrix.push_back(row);
+  }
+
+  nlohmann::json firstEchelonVehiclesJson = instance["first_echelon_vehicles"];
+  for (size_t i = 0; i < firstEchelonVehiclesJson.size(); i++)
+  {
+    Vehicle vehicle(
+      firstEchelonVehiclesJson[i]["vehicle_id"],
+      firstEchelonVehiclesJson[i]["capacity"],
+      firstEchelonVehiclesJson[i]["variable_cost"],
+      firstEchelonVehiclesJson[i]["fixed_cost"]
+    );
+    first_echelon_vehicles.push_back(vehicle);
+  }
+
+  nlohmann::json secondEchelonVehiclesJson = instance["second_echelon_vehicles"];
+  for (size_t i = 0; i < secondEchelonVehiclesJson.size(); i++)
+  {
+    Vehicle vehicle(
+      secondEchelonVehiclesJson[i]["vehicle_id"],
+      secondEchelonVehiclesJson[i]["capacity"],
+      secondEchelonVehiclesJson[i]["variable_cost"],
+      secondEchelonVehiclesJson[i]["fixed_cost"]
+    );
+    second_echelon_vehicles.push_back(vehicle);
+  }
+
+  ProblemInstance problem(
+    schools, 
+    kitchens, 
+    suppliers, 
+    ingredients,
+    first_echelon_matrix,
+    second_echelon_matrix,
+    first_echelon_vehicles,
+    second_echelon_vehicles
+  );
   return problem;
 }
 
-ProblemInstance::ProblemInstance(Node depot, std::vector<School>& schools,
-  std::vector<Kitchen>& kitchens, std::vector<Supplier>& suppliers,
-  std::vector<Vehicle>& first_echelon_vehicles,
-  std::vector<Vehicle>& second_echelon_vehicles,
+ProblemInstance::ProblemInstance(
+  std::vector<School>& schools, 
+  std::vector<Kitchen>& kitchens, 
+  std::vector<Supplier>& suppliers, 
+  std::vector<Ingredient>& ingredients,
   std::optional<std::vector<std::vector<double>>> first_echelon_matrix,
   std::optional<std::vector<std::vector<double>>> second_echelon_matrix,
-  std::vector<Ind
+  std::vector<Vehicle>& first_echelon_vehicles,
+  std::vector<Vehicle>& second_echelon_vehicles
 ){
-  
-  numVehicles = int(vehicles.size());
-  vehicleCosts.reserve(numVehicles);
-  vehicleIdxs.resize(numVehicles);
-  std::iota(vehicleIdxs.begin(), vehicleIdxs.end(), 0);
-  for (auto& vehicle : vehicles) {
-    vehicleCosts.push_back(vehicle.cost);
-    vehicleCapacities.push_back(vehicle.capacity);
-  }
-  
-  numCustomers = int(customers.size());
-  numLockers = int(lockers.size());
-  numNodes = numCustomers + numLockers + 1;
-  coords.assign(numNodes, {});
-  coords[0] = { depot.x, depot.y };
+  this->schools = schools;
+  this->kitchens = kitchens;
+  this->suppliers = suppliers;
+  this->ingredients = ingredients;
 
-  demands.resize(numNodes, 0);
-  nodeTypes.resize(numNodes, NodeType::Locker);
-  nodeTypes[0] = NodeType::Depot;;
-  destinationAlternatives.resize(numNodes);
-  for (auto& customer : customers) {
-    customerIdxs.push_back(customer.idx);
-    demands[customer.idx] = customer.demand;
-    nodeTypes[customer.idx] = customer.nodeType;
-    coords[customer.idx] = { customer.x, customer.y };
-    if (customer.nodeType == NodeType::SelfPickup || customer.nodeType == NodeType::Flexible) {
-      destinationAlternatives[customer.idx] = customer.preferredLockerIdxs;
-    }
-    if (customer.nodeType != NodeType::SelfPickup) {
-      destinationAlternatives[customer.idx].push_back(customer.idx);
-    }
-  }
-  lockerCapacities.resize(numNodes);
-  for (auto& locker : lockers) {
-    lockerIdxs.push_back(locker.idx);
-    lockerCapacities[locker.idx] = locker.capacity;
-    coords[locker.idx] = { locker.x, locker.y };
-  }
-
-  numMrtLines = int(mrtLines.size());
-  incomingMrtLinesIdx.assign(numNodes, -1);
-  outgoingMrtLinesIdx.assign(numNodes, -1);
-  mrtLineEndStationIdxs.resize(numMrtLines);
-  mrtLineCapacities.resize(numMrtLines);
-  mrtLineStartStationIdxs.resize(numMrtLines);
-  mrtLineCosts.resize(numMrtLines);
-  for (int mrtLineIdx = 0; mrtLineIdx < numMrtLines;mrtLineIdx++) {
-    auto& mrtLine = mrtLines[mrtLineIdx];
-    mrtLineIdxs.push_back(mrtLineIdx);
-    incomingMrtLinesIdx[mrtLine.endStationNodeIdx] = mrtLineIdx;
-    outgoingMrtLinesIdx[mrtLine.startStationNodeIdx] = mrtLineIdx;
-    mrtLineCapacities[mrtLineIdx] = mrtLine.freightCapacity;
-    mrtLineCosts[mrtLineIdx] = mrtLine.cost;
-    mrtLineStartStationIdxs[mrtLineIdx] = mrtLine.startStationNodeIdx;
-    mrtLineEndStationIdxs[mrtLineIdx] = mrtLine.endStationNodeIdx;
-  }
-  
-  if (distanceMatrix_) {
-    distanceMatrix = *distanceMatrix_;
+  if (first_echelon_matrix.has_value()) {
+    this->first_echelon_matrix = first_echelon_matrix.value();
   }
   else {
-    distanceMatrix.assign(numNodes, std::vector<double>(numNodes));
-    for (int i = 0; i < numNodes;i++) {
-      for (int j = 0; j < numNodes; j++) {
-        double x2 = (coords[i][0] - coords[j][0]) * (coords[i][0] - coords[j][0]);
-        double y2 = (coords[i][1] - coords[j][1]) * (coords[i][1] - coords[j][1]);
-        distanceMatrix[i][j]= std::sqrt(x2 + y2);
-      }
-    }
+    this->first_echelon_matrix = std::vector<std::vector<double>>{};
+  }
+
+  if (second_echelon_matrix.has_value()) {
+    this->second_echelon_matrix = second_echelon_matrix.value();
+  }
+  else {
+    this->second_echelon_matrix = std::vector<std::vector<double>>{};
+  }
+  this->first_echelon_vehicles = first_echelon_vehicles;
+  this->second_echelon_vehicles = second_echelon_vehicles;
+
+  supplier_indexes.reserve(suppliers.size());
+  for (size_t i = 0; i < suppliers.size(); i++){
+    supplier_indexes.push_back(i);
+  }
+  kitchen_e1_indexes.reserve(kitchens.size());
+  for (size_t i = supplier_indexes.size(); i < supplier_indexes.size() + kitchens.size(); i++)
+  {
+    kitchen_e1_indexes.push_back(i);
+  }
+
+  kitchen_e2_indexes.reserve(kitchens.size());
+  for (size_t i = 0; i < kitchens.size(); i++){
+    kitchen_e2_indexes.push_back(i);
+  }
+  school_indexes.reserve(schools.size());
+  for (size_t i = kitchen_e2_indexes.size(); i < kitchen_e2_indexes.size() + schools.size(); i++)
+  {
+    school_indexes.push_back(i);
+  }
+
+  //sekalian validate
+  if ((first_echelon_matrix.value().size() > 0) && (first_echelon_matrix.value().size() != (supplier_indexes.size() + kitchen_e1_indexes.size()))) {
+    throw std::runtime_error("First echelon matrix row size does not match number of suppliers");
+  }
+  if ((second_echelon_matrix.value().size() > 0) && (second_echelon_matrix.value().size() != (kitchen_e2_indexes.size() + school_indexes.size()))) {
+    throw std::runtime_error("First echelon matrix row size does not match number of suppliers");
+  }
+  
+  //coords list for uhhh, just in case?
+  for (size_t i = 0; i < suppliers.size(); i++)
+  {
+    first_echelon_coords.push_back({suppliers[i].x, suppliers[i].y});
+    supplier_ingredient_type_indexes.push_back(findIngredientTypeIndex(ingredients, suppliers[i].ingredient_type));
+  }
+  for (size_t i = 0; i < kitchens.size(); i++)
+  {
+    first_echelon_coords.push_back({kitchens[i].x, kitchens[i].y});
+    second_echelon_coords.push_back({kitchens[i].x, kitchens[i].y});
+    kitchen_capacities.push_back(kitchens[i].capacity);
+    kitchen_fixed_costs.push_back(kitchens[i].fix_cost);
+    kitchen_n_vehicles.push_back(kitchens[i].n_vehicles);
+  }
+  for (size_t i = 0; i < schools.size(); i++)
+  {
+    second_echelon_coords.push_back({schools[i].x, schools[i].y});
+    school_demands.push_back(schools[i].demand);
+    school_lunch_times.push_back(schools[i].lunch_time);
+    school_service_times.push_back(schools[i].service_time);
   }
 }

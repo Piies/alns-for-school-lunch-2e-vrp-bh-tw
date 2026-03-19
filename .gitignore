@@ -13,3 +13,4 @@ CMakeUserPresets.json
 idk.txt
 /cvrpptpl/
 /build/
+/vcpkg_installed/

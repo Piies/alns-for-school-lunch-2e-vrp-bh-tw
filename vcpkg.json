@@ -3,6 +3,7 @@
     "tbb",
     "highs",
     "gtest",
-    "fmt"
+    "fmt",
+    "nlohmann-json"
   ]
 }
