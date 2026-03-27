@@ -6,6 +6,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <fmt/core.h>
 #include <nlohmann/json.hpp>
 
 #include "problem/problem.h"
@@ -24,6 +25,69 @@ static int findIngredientTypeIndex(std::vector<Ingredient>& ingredients, std::st
     }
   }
   throw std::runtime_error("Ingredient type " + ingredientType + " not found in ingredients list");
+}
+
+bool ProblemInstance::problemInstanceFeasibilityCheck() {
+  //check if all suppliers have their ingredient type in the ingredients list
+  for (size_t i = 0; i < this->suppliers.size(); i++)
+  {
+    bool found = false;
+    for (size_t j = 0; j < this->ingredients.size(); j++)
+    {
+      if (this->suppliers[i].ingredient_type == this->ingredients[j].name) {
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      fmt::print("Feasibility check failed: Supplier {} has ingredient type {} which is not found in ingredients list\n", this->suppliers[i].idx, this->suppliers[i].ingredient_type);
+      return false;
+     }
+  }
+  //Total kitchen capacity must cover total school demand
+  int total_kitchen_cap = 0;
+  for (int s = 0; s < kitchens.size(); ++s)
+      total_kitchen_cap += kitchens[s].capacity;
+  
+  int total_demand = 0;
+  for (int n = 0; n < schools.size(); ++n)
+      total_demand += schools[n].demand;
+  
+  if (total_kitchen_cap < total_demand) {
+      fmt::print("Feasibility check failed: total kitchen capacity {} is less than total school demand {}\n", total_kitchen_cap, total_demand);
+      return false;
+  }
+
+  // //For each ingredient type, at least one depot must exist
+  // for (int beta = 0; beta < inst.num_ingredient_types(); ++beta) {
+  //     if (inst.depots_for_ingredient(beta).empty()) {
+  //         fmt::print("Feasibility check failed: no depot for ingredient {}\n", beta);
+  //         return false;
+  //     }
+  // }
+
+  //Every school must be reachable from at least one satellite
+  // within its time window (travel time check, ignoring routing)
+  for (int n = 0; n < schools.size(); ++n) {
+      bool reachable = false;
+      int  L = schools[n].lunch_time;
+      for (int s = 0; s < kitchens.size(); ++s) {
+          // earliest possible departure for this school's batch
+          int batch = 300;  // 300, 420, or 540
+          double travel_time = second_echelon_matrix[kitchen_e2_indexes[s]][school_indexes[n]];
+          double arrive = batch + travel_time;
+          if (travel_time > maximum_2e_lh_route_duration) {
+              fmt::print("Feasibility check failed: travel time from kitchen {} to school {} is {} which exceeds maximum 2e lh route duration {}\n", s, n, travel_time, maximum_2e_lh_route_duration);
+              return false;
+          }
+          if (arrive <= L) { reachable = true; break; }
+      }
+      if (!reachable) {
+          fmt::print("Feasibility check failed: school {} unreachable within window {}\n", n, L);
+          return false;
+      }
+  }
+  return true;
 }
 
 ProblemInstance readProblemInstance(std::string instancePath) {
@@ -228,7 +292,6 @@ ProblemInstance::ProblemInstance(
   {
     first_echelon_coords.push_back({kitchens[i].x, kitchens[i].y});
     second_echelon_coords.push_back({kitchens[i].x, kitchens[i].y});
-    kitchen_capacities.push_back(kitchens[i].capacity);
     kitchen_fixed_costs.push_back(kitchens[i].fix_cost);
     kitchen_n_vehicles.push_back(kitchens[i].n_vehicles);
   }
@@ -239,4 +302,6 @@ ProblemInstance::ProblemInstance(
     school_lunch_times.push_back(schools[i].lunch_time);
     school_service_times.push_back(schools[i].service_time);
   }
+
+  feasible = problemInstanceFeasibilityCheck();
 }

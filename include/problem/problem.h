@@ -20,7 +20,11 @@ struct Ingredient;
 
 
 struct ProblemInstance {
-  //truke data
+  //truke data that should be in config? but ima put it here for now.
+  int maximum_2e_lh_route_duration = 180; // in minutes, for guardrails
+  int maximum_1e_route_duration = 120; // in minutes, for guardrails
+
+  //truke data, for guardrails
   std::vector<School> schools;
   std::vector<Kitchen> kitchens;
   std::vector<Supplier> suppliers;
@@ -36,7 +40,9 @@ struct ProblemInstance {
   std::vector<int> supplier_indexes;
   std::vector<int> kitchen_e1_indexes;
   std::vector<int> kitchen_e2_indexes;
-  std::vector<int> school_indexes;
+  //maps the index of kitchens in lists with only kitchens to it's index in the distance matrix
+  std::vector<int> school_indexes; 
+  //maps the index of schools in lists with only schools to it's index in the distance matrix
 
   std::vector<std::pair<double, double>> first_echelon_coords;
   std::vector<std::pair<double, double>> second_echelon_coords;
@@ -45,12 +51,15 @@ struct ProblemInstance {
   std::vector<int> school_lunch_times;
   std::vector<double> school_service_times;
 
-  std::vector<int> kitchen_capacities;
   std::vector<int> kitchen_fixed_costs;
   std::vector<int> kitchen_n_vehicles;
 
   std::vector<int> supplier_ingredient_type_indexes;
 
+  bool feasible;
+
+  bool problemInstanceFeasibilityCheck();
+  
   ProblemInstance(
     std::vector<School>& schools, 
     std::vector<Kitchen>& kitchens, 

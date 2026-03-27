@@ -7,6 +7,10 @@
 #include <process.h>
 #include <string>
 
+#include "utils/config.h"
+#include "problem/cvrpptpl.h"
+
+
 static std::string getSourceDir() {
 	std::string fileMacro = __FILE__;
 	// Find last slash or backslash (cross-platform)
@@ -20,6 +24,9 @@ int main(int argc, char* argv[])
 {
     std::string sourceDir = getSourceDir();
 	std::string instanceDir = sourceDir + "/instances";
-    fmt::print("Hello World!\n");
+	Config cfg(argc, argv);
+    
+	std::string instancePath = instanceDir + "/" + cfg.instanceName;
+
     return 0;
 }
